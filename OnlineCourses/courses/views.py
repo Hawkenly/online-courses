@@ -269,6 +269,7 @@ class CommentViewSet(ModelViewSet):
     destroy=extend_schema(summary="Delete attachment", tags=['Attachments']),
 )
 class AttachmentViewSet(ModelViewSet):
+    queryset = Attachment.objects.all()
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post', 'delete']
