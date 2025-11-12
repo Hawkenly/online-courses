@@ -44,13 +44,11 @@ class CourseViewSet(ModelViewSet):
         return CourseSerializer
 
     def perform_create(self, serializer):
-        if self.request.user.role != User.RoleTypes.TEACHER:
-            raise PermissionDenied("Only teachers can create courses.")
         serializer.save(created_by=self.request.user)
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated(), IsTeacher()]
+            return [IsTeacher()]
         return [IsAuthenticated()]
 
 
@@ -87,8 +85,6 @@ class LectureViewSet(ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        if self.request.user.role != User.RoleTypes.TEACHER:
-            raise PermissionDenied("Only teachers can create lectures.")
         lecture = serializer.save()
         attachments = self.request.data.get('attachments')
         if attachments:
@@ -96,7 +92,7 @@ class LectureViewSet(ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated(), IsTeacher()]
+            return [IsTeacher()]
         return [IsAuthenticated()]
 
 @extend_schema_view(
@@ -132,13 +128,11 @@ class TaskViewSet(ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        if self.request.user.role != User.RoleTypes.TEACHER:
-            raise PermissionDenied("Only teachers can create tasks.")
         serializer.save()
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated(), IsTeacher()]
+            return [IsTeacher()]
         return [IsAuthenticated()]
 
 
@@ -168,9 +162,9 @@ class SolutionViewSet(ModelViewSet):
 
     def get_permissions(self):
         if self.action == 'create':
-            return [IsAuthenticated(), IsStudent()]
+            return [IsStudent()]
         if self.action in ['update', 'partial_update', 'destroy']:
-            return [IsAuthenticated(), IsTeacher()]
+            return [IsTeacher()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -186,22 +180,24 @@ class SolutionViewSet(ModelViewSet):
         user = self.request.user
         if task.deadline < timezone.now():
             raise ValidationError("Deadline passed")
+
         try:
             enrollment = Enrollment.objects.get(student=user, course=task.lecture.course)
         except Enrollment.DoesNotExist:
             raise PermissionDenied("You are not enrolled in this course.")
         if enrollment.status != Enrollment.Status.APPROVED:
             raise PermissionDenied("Your enrollment is not approved; you cannot submit solutions.")
+
         last_solution = Solution.objects.filter(task=task, submitted_by=user).order_by('submitted_at').last()
         if last_solution and last_solution.mark is None:
             raise ValidationError("Previous solution not graded")
+
         solution = serializer.save(submitted_by=user)
         attachments = serializer.validated_data.get('attachments', [])
         if attachments:
             solution.attachments.set(attachments)
 
     def perform_update(self, serializer):
-        instance = serializer.instance
         instance = serializer.save()
         if instance.mark is not None:
             try:
@@ -320,8 +316,8 @@ class EnrollmentViewSet(ModelViewSet):
     def get_permissions(self):
         if self.action == 'create':
             return [IsAuthenticated()]
-        if self.action in ['update', 'partial_update', 'destroy', 'approve']:
-            return [IsAuthenticated(), IsTeacher()]
+        if self.action in ['update', 'partial_update', 'destroy', 'approve', 'reject']:
+            return [ IsTeacher()]
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
@@ -340,7 +336,7 @@ class EnrollmentViewSet(ModelViewSet):
         tags=['Enrollments'],
         responses={200: EnrollmentSerializer}
     )
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTeacher])
+    @action(detail=True, methods=['post'], permission_classes=[IsTeacher])
     def approve(self, request, pk=None):
         enrollment = self.get_object()
         enrollment.status = Enrollment.Status.APPROVED
@@ -353,7 +349,7 @@ class EnrollmentViewSet(ModelViewSet):
         tags=['Enrollments'],
         responses={200: EnrollmentSerializer}
     )
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTeacher])
+    @action(detail=True, methods=['post'], permission_classes=[IsTeacher])
     def reject(self, request, pk=None):
         enrollment = self.get_object()
         enrollment.status = Enrollment.Status.REJECTED
