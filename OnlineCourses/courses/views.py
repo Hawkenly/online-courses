@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from drf_spectacular.utils import extend_schema_view, extend_schema
 
+from accounts.models import User
 from .models import Course, Lecture, Task, Solution, Comment, Attachment, Enrollment
 from .serializers import (
     CourseSerializer, CourseCreateSerializer, CourseListSerializer,
@@ -43,7 +44,7 @@ class CourseViewSet(ModelViewSet):
         return CourseSerializer
 
     def perform_create(self, serializer):
-        if self.request.user.role != 'teacher':
+        if self.request.user.role != User.RoleTypes.TEACHER:
             raise PermissionDenied("Only teachers can create courses.")
         serializer.save(created_by=self.request.user)
 
@@ -78,7 +79,7 @@ class LectureViewSet(ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return Lecture.objects.all()
-        if getattr(user, 'role', None) == 'teacher':
+        if getattr(user, 'role', None) == user.RoleTypes.TEACHER:
             return Lecture.objects.filter(course__created_by=user)
         return Lecture.objects.filter(
             course__enrollments__student=user,
@@ -86,7 +87,7 @@ class LectureViewSet(ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        if self.request.user.role != 'teacher':
+        if self.request.user.role != User.RoleTypes.TEACHER:
             raise PermissionDenied("Only teachers can create lectures.")
         lecture = serializer.save()
         attachments = self.request.data.get('attachments')
@@ -123,7 +124,7 @@ class TaskViewSet(ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return Task.objects.all()
-        if getattr(user, 'role', None) == 'teacher':
+        if getattr(user, 'role', None) == User.RoleTypes.TEACHER:
             return Task.objects.filter(lecture__course__created_by=user)
         return Task.objects.filter(
             lecture__course__enrollments__student=user,
@@ -131,7 +132,7 @@ class TaskViewSet(ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        if self.request.user.role != 'teacher':
+        if self.request.user.role != User.RoleTypes.TEACHER:
             raise PermissionDenied("Only teachers can create tasks.")
         serializer.save()
 
@@ -176,7 +177,7 @@ class SolutionViewSet(ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return Solution.objects.all()
-        if getattr(user, 'role', None) == 'teacher':
+        if getattr(user, 'role', None) == User.RoleTypes.TEACHER:
             return Solution.objects.filter(task__lecture__course__created_by=user)
         return Solution.objects.filter(submitted_by=user)
 
@@ -189,7 +190,7 @@ class SolutionViewSet(ModelViewSet):
             enrollment = Enrollment.objects.get(student=user, course=task.lecture.course)
         except Enrollment.DoesNotExist:
             raise PermissionDenied("You are not enrolled in this course.")
-        if enrollment.status != 'approved':
+        if enrollment.status != Enrollment.Status.APPROVED:
             raise PermissionDenied("Your enrollment is not approved; you cannot submit solutions.")
         last_solution = Solution.objects.filter(task=task, submitted_by=user).order_by('submitted_at').last()
         if last_solution and last_solution.mark is None:
@@ -230,7 +231,7 @@ class CommentViewSet(ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return Comment.objects.all()
-        if getattr(user, 'role', None) == 'teacher':
+        if getattr(user, 'role', None) == User.RoleTypes.TEACHER:
             return Comment.objects.filter(solution__task__lecture__course__created_by=user)
         return Comment.objects.filter(
             models.Q(solution__submitted_by=user) |
@@ -243,7 +244,7 @@ class CommentViewSet(ModelViewSet):
         solution = serializer.validated_data.get('solution')
         course = solution.task.lecture.course
 
-        if getattr(user, 'role', None) == 'teacher':
+        if getattr(user, 'role', None) == User.RoleTypes.TEACHER:
             if course.created_by != user and not user.is_staff:
                 raise PermissionDenied("Only teacher of this course can comment.")
             serializer.save(author=user)
@@ -257,7 +258,7 @@ class CommentViewSet(ModelViewSet):
             enrollment = Enrollment.objects.get(student=user, course=course)
         except Enrollment.DoesNotExist:
             raise PermissionDenied("You are not enrolled in this course.")
-        if enrollment.status != 'approved':
+        if enrollment.status != Enrollment.Status.APPROVED:
             raise PermissionDenied("Your enrollment is not approved; you cannot comment.")
         serializer.save(author=user)
 
@@ -280,7 +281,7 @@ class AttachmentViewSet(ModelViewSet):
         if user.is_staff:
             return Attachment.objects.all()
 
-        if getattr(user, 'role', None) == 'teacher':
+        if getattr(user, 'role', None) == User.RoleTypes.TEACHER:
             return Attachment.objects.filter(
                 models.Q(lectures__course__created_by=user) |
                 models.Q(solutions__task__lecture__course__created_by=user)
@@ -325,11 +326,11 @@ class EnrollmentViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role == 'student':
-            serializer.save(student=user, status='pending')
-        elif user.role == 'teacher':
+        if user.role == User.RoleTypes.STUDENT:
+            serializer.save(student=user, status=Enrollment.Status.PENDING)
+        elif user.role == User.RoleTypes.TEACHER:
             instance = serializer.save()
-            if instance.status == 'approved':
+            if instance.status == Enrollment.Status.APPROVED:
                 instance.update_average_grade()
         else:
             raise PermissionDenied("Only students or teachers can create enrollments.")
@@ -342,7 +343,7 @@ class EnrollmentViewSet(ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTeacher])
     def approve(self, request, pk=None):
         enrollment = self.get_object()
-        enrollment.status = 'approved'
+        enrollment.status = Enrollment.Status.APPROVED
         enrollment.save(update_fields=['status'])
         enrollment.update_average_grade()
         return Response({'status': 'approved'})
@@ -355,7 +356,7 @@ class EnrollmentViewSet(ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTeacher])
     def reject(self, request, pk=None):
         enrollment = self.get_object()
-        enrollment.status = 'rejected'
+        enrollment.status = Enrollment.Status.REJECTED
         enrollment.save(update_fields=['status'])
         return Response({'status': 'rejected'})
 

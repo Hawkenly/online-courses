@@ -23,13 +23,13 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractUser):
-    ROLE_CHOICES = (
-        ('teacher', 'Teacher'),
-        ('student', 'Student'),
-    )
+    class RoleTypes(models.TextChoices):
+        TEACHER = 'teacher', 'Teacher'
+        STUDENT = 'student', 'Student'
+
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=100)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=7, choices=RoleTypes.choices)
     username = None
 
     USERNAME_FIELD = 'email'
