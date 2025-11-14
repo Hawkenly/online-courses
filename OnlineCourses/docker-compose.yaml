@@ -9,6 +9,12 @@ services:
     ports:
       - "5432:5432"
 
+  redis:
+    image: redis:7
+    container_name: online_courses_redis
+    ports:
+      - "6379:6379"
+
   web:
     build: .
     container_name: online_courses_web
@@ -19,10 +25,13 @@ services:
       - "8000:8000"
     depends_on:
       - db
+      - redis
     env_file:
       - .env
     environment:
       - DATABASE_HOST=db
+      - CELERY_BROKER_URL = redis://localhost:6379
+      - CELERY_BACKEND_RESULT = redis://localhost:6379
 
 volumes:
   postgres_data:

@@ -24,6 +24,17 @@ env = environ.Env(
 
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
+#Celery setting
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
+
+CELERY_TASK_QUEUES = {
+    'long_tasks': {
+        'exchange': 'long_tasks',
+        'routing_key': 'long_tasks',
+    }
+}
+
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 

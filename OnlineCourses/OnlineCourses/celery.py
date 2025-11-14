@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 from celery import Celery
 
@@ -11,6 +12,13 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 
 
 app.autodiscover_tasks()
+
+app.conf.beat_schedule = {
+    'long_running_query_every_10_seconds' : {
+        'task': 'long_running_query',
+        'schedule': timedelta(seconds=10),
+    }
+}
 
 
 @app.task(bind=True, ignore_result=True)
