@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import environ
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,6 +24,43 @@ env = environ.Env(
 )
 
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+#Celery setting
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
+
+CELERY_TASK_QUEUES = {
+    'weather': {
+        'exchange': 'weather',
+        'routing_key': 'weather',
+    }
+}
+
+CELERY_BEAT_SCHEDULE = {
+    'fetch-weather-every-5-min': {
+        'task': 'fetch_weather',
+        'schedule': crontab(minute='*/5'),
+    },
+}
+
+#External API settings
+WEATHER_LAT = env('WEATHER_LAT')
+WEATHER_LON = env('WEATHER_LON')
+WEATHER_CACHE_KEY = env('WEATHER_CACHE_KEY')
+WEATHER_API_URL = env('WEATHER_API_URL')
+
+#Redis cache
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': env('REDIS_URL'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+        }
+    }
+}
+
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
@@ -43,6 +81,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'accounts',
     'courses.apps.CoursesConfig',
+    'external_api'
 ]
 
 REST_FRAMEWORK = {
@@ -78,6 +117,7 @@ SPECTACULAR_SETTINGS = {
             {'name': 'Comments', 'description': 'Комментарии'},
             {'name': 'Attachments', 'description': 'Файлы'},
             {'name': 'Auth', 'description': 'Аутентификация'},
+            {'name': 'Weather', 'description': 'Внешнее API прогноз погоды'},
         ],
 }
 

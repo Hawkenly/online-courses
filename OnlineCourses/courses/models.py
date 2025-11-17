@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import Avg
 
 from accounts.models import User
-from core.models.mixins import CreatedAtMixin, SubmittedAtMixin, RequestedAtMixin
+from core.models.mixins import CreatedAtMixin, SubmittedAtMixin, RequestedAtMixin, UploadedAtMixin
 
 
 class Course(CreatedAtMixin):
@@ -25,7 +25,7 @@ class Lecture(CreatedAtMixin):
         return self.name
 
 
-class Attachment(UploadedFile):
+class Attachment(UploadedAtMixin):
     file = models.FileField(upload_to='attachments/')
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
 
