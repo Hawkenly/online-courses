@@ -75,14 +75,19 @@ class LectureViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+
         if user.is_staff:
             return Lecture.objects.all()
-        if getattr(user, 'role', None) == user.RoleTypes.TEACHER:
+
+        if getattr(user, "role", None) == User.RoleTypes.TEACHER:
             return Lecture.objects.filter(course__created_by=user)
-        return Lecture.objects.filter(
-            course__enrollments__student=user,
-            course__enrollments__status='approved'
-        ).distinct()
+
+        approved_course_ids = Enrollment.objects.filter(
+            student=user,
+            status=Enrollment.Status.APPROVED
+        ).values_list('course_id', flat=True)
+
+        return Lecture.objects.filter(course_id__in=approved_course_ids).distinct()
 
     def perform_create(self, serializer):
         lecture = serializer.save()
@@ -118,14 +123,19 @@ class TaskViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+
         if user.is_staff:
             return Task.objects.all()
-        if getattr(user, 'role', None) == User.RoleTypes.TEACHER:
+
+        if getattr(user, "role", None) == User.RoleTypes.TEACHER:
             return Task.objects.filter(lecture__course__created_by=user)
-        return Task.objects.filter(
-            lecture__course__enrollments__student=user,
-            lecture__course__enrollments__status='approved'
-        ).distinct()
+
+        approved_course_ids = Enrollment.objects.filter(
+            student=user,
+            status=Enrollment.Status.APPROVED
+        ).values_list('course_id', flat=True)
+
+        return Task.objects.filter(lecture__course_id__in=approved_course_ids).distinct()
 
     def perform_create(self, serializer):
         serializer.save()
@@ -322,9 +332,9 @@ class EnrollmentViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role == User.RoleTypes.STUDENT:
+        if getattr(user, "role", None) == User.RoleTypes.STUDENT:
             serializer.save(student=user, status=Enrollment.Status.PENDING)
-        elif user.role == User.RoleTypes.TEACHER:
+        elif getattr(user, "role", None) == User.RoleTypes.TEACHER:
             instance = serializer.save()
             if instance.status == Enrollment.Status.APPROVED:
                 instance.update_average_grade()

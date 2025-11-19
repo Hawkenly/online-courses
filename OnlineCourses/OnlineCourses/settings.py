@@ -33,6 +33,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,6 +44,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'accounts',
     'courses.apps.CoursesConfig',
+    'channels',
 ]
 
 REST_FRAMEWORK = {
@@ -116,6 +118,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'OnlineCourses.wsgi.application'
 
+#Channels configuration
+ASGI_APPLICATION = 'OnlineCourses.asgi.application'
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],
+            'symmetric_encryption_keys': [SECRET_KEY],
+        }
+    }
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
