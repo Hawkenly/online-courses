@@ -1,8 +1,6 @@
 from rest_framework import serializers
 
-from rest_framework import serializers
-
-from courses.models import Course
+from courses.models import Course, Enrollment
 
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
@@ -14,7 +12,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
             existing = set(self.fields.keys())
             for field_name in existing - allowed:
                 self.fields.pop(field_name)
-
 
 
 class TaskForStudentSerializer(serializers.Serializer):
@@ -36,14 +33,20 @@ class CourseForStudentSerializer(serializers.Serializer):
     average_grade = serializers.FloatField(allow_null=True)
     lectures = LectureForStudentSerializer(many=True)
 
-class StudentSummarySerializer(serializers.Serializer):
-    student_id = serializers.IntegerField()
-    full_name = serializers.CharField()
-    email = serializers.EmailField()
-    courses = CourseForStudentSerializer(many=True)
+class StudentSummarySerializer(DynamicFieldsModelSerializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    status = serializers.CharField(read_only=True)
+    average_grade = serializers.FloatField(allow_null=True)
+    lectures_count = serializers.IntegerField()
+    tasks_count = serializers.IntegerField()
+
+    class Meta:
+        model = Enrollment
+        fields = ('id', 'name', 'status', 'average_grade', 'lectures_count', 'tasks_count')
 
 
-class CourseForTeacherSerializer(DynamicFieldsModelSerializer):
+class TeacherSummarySerializer(DynamicFieldsModelSerializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     students_count = serializers.IntegerField()
