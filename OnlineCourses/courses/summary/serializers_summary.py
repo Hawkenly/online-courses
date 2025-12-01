@@ -14,45 +14,27 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
                 self.fields.pop(field_name)
 
 
-class TaskForStudentSerializer(serializers.Serializer):
-    task_id = serializers.IntegerField()
-    task_title = serializers.CharField()
-    deadline = serializers.DateTimeField()
-    submitted = serializers.BooleanField()
-    mark = serializers.IntegerField(allow_null=True)
-
-class LectureForStudentSerializer(serializers.Serializer):
-    lecture_id = serializers.IntegerField()
-    lecture_name = serializers.CharField()
-    tasks = TaskForStudentSerializer(many=True)
-
-class CourseForStudentSerializer(serializers.Serializer):
-    course_id = serializers.IntegerField()
-    course_name = serializers.CharField()
-    status = serializers.CharField()
-    average_grade = serializers.FloatField(allow_null=True)
-    lectures = LectureForStudentSerializer(many=True)
-
 class StudentSummarySerializer(DynamicFieldsModelSerializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField()
+    id = serializers.IntegerField(source='course_id', read_only=True)
+    name = serializers.CharField(read_only=True)
     status = serializers.CharField(read_only=True)
     average_grade = serializers.FloatField(allow_null=True)
-    lectures_count = serializers.IntegerField()
-    tasks_count = serializers.IntegerField()
+    lectures_count = serializers.IntegerField(read_only=True)
+    tasks_count = serializers.IntegerField(read_only=True)
+    solved_percentage = serializers.FloatField()
 
     class Meta:
         model = Enrollment
-        fields = ('id', 'name', 'status', 'average_grade', 'lectures_count', 'tasks_count')
+        fields = ('id', 'name', 'status', 'average_grade', 'lectures_count', 'tasks_count', 'solved_percentage')
 
 
 class TeacherSummarySerializer(DynamicFieldsModelSerializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-    students_count = serializers.IntegerField()
-    average_grade = serializers.FloatField(allow_null=True)
-    lectures_count = serializers.IntegerField()
-    tasks_count = serializers.IntegerField()
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    students_count = serializers.IntegerField(read_only=True)
+    average_grade = serializers.FloatField(allow_null=True, read_only=True)
+    lectures_count = serializers.IntegerField(read_only=True)
+    tasks_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Course

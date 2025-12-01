@@ -1,16 +1,16 @@
-from django.db.models import Q, Prefetch
+from django.db.models import Q, Prefetch, F, ExpressionWrapper, FloatField, Case, When, Value
 from django.db.models.aggregates import Count, Avg
-from django.utils.text import capfirst
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import serializers as drf_serializers
 
 from accounts.models import User
 from accounts.permissions import IsTeacher
-from courses.models import Course, Lecture, Enrollment, Solution
+from courses.models import Course, Lecture, Enrollment
 from courses.summary.serializers_summary import TeacherSummarySerializer, StudentSummarySerializer
 
 
@@ -19,24 +19,28 @@ class TablePagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
-def infer_col_meta_from_model(model, field_name):
-    try:
-        field = model._meta.get_field(field_name)
-        label = capfirst(getattr(field, 'verbose_name', field_name))
-        internal_type = field.get_internal_type().lower()
-        if internal_type in ('integerfield', 'bigintegerfield', 'smallintegerfield', 'positiveintegerfield'):
-            t = 'number'
-        elif internal_type in ('floatfield', 'decimalfield'):
-            t = 'number'
-        elif internal_type in ('booleanfield',):
-            t = 'boolean'
-        elif internal_type in ('datefield', 'datetimefield', 'timefield'):
-            t = 'date'
-        else:
-            t = 'string'
-        return {'key': field_name, 'label': str(label), 'type': t, 'sortable': True}
-    except Exception:
-        return {'key': field_name, 'label': field_name.replace('_', ' ').title(), 'type': 'string', 'sortable': True}
+
+def _map_serializer_field_to_type(field):
+    if isinstance(field, (drf_serializers.IntegerField, drf_serializers.FloatField, drf_serializers.DecimalField)):
+        return 'number'
+    if isinstance(field, drf_serializers.BooleanField):
+        return 'boolean'
+    if isinstance(field, (drf_serializers.DateTimeField, drf_serializers.DateField, drf_serializers.TimeField)):
+        return 'date'
+    return 'string'
+
+def infer_col_meta(field_name, *, serializer=None):
+    if serializer is not None:
+        single = getattr(serializer, 'child', None) or serializer
+        try:
+            field = single.fields.get(field_name)
+            if field is not None:
+                label = getattr(field, 'label', None) or field_name.replace('_', ' ').title()
+                ftype = _map_serializer_field_to_type(field)
+                return {'key': field_name, 'label': str(label), 'type': ftype, 'sortable': True}
+        except Exception:
+            pass
+    return {'key': field_name, 'label': field_name.replace('_', ' ').title(), 'type': 'string', 'sortable': True}
 
 
 class TeacherSummaryView(GenericAPIView):
@@ -112,7 +116,7 @@ class TeacherSummaryView(GenericAPIView):
         cols_keys = requested if requested is not None else list(serializer.child.fields.keys())
         cols = []
         for f in cols_keys:
-            col_meta = infer_col_meta_from_model(Course, f)
+            col_meta = infer_col_meta(f, serializer=serializer)
             col_meta['sortable'] = (f in allowed_sort_fields)
             cols.append(col_meta)
 
@@ -175,12 +179,22 @@ class StudentSummaryView(GenericAPIView):
             )
 
         enrollments_qs = (Enrollment.objects.filter(student = student, status = Enrollment.Status.APPROVED)
-                    .select_related('course')
-                    .prefetch_related(Prefetch(
-                                 'course__lectures',
-                                         queryset = Lecture.objects.prefetch_related('tasks')
-                                )
-                    )
+            .select_related('course')
+            .prefetch_related(Prefetch('course__lectures', queryset = Lecture.objects.prefetch_related('tasks')))
+            .annotate(
+                lectures_count = Count('course__lectures', distinct=True),
+                tasks_count = Count('course__lectures__tasks', distinct=True),
+                name = F('course__name'),
+                solved_tasks_count = Count('course__lectures__tasks__solutions',
+                                           filter=Q(course__lectures__tasks__solutions__submitted_by=student),
+                                           distinct=True),
+                solved_percentage = ExpressionWrapper(F('solved_tasks_count') * 1.0 / Case(
+                                                        When(tasks_count=0, then=Value(1)),
+                                                        default=F('tasks_count'),
+                                                   ),
+                                                   output_field=FloatField()
+                )
+            )
         )
 
         requested = None
@@ -189,7 +203,7 @@ class StudentSummaryView(GenericAPIView):
             requested = [f.strip() for f in fields_param.split(',') if f.strip()]
 
         sort = request.query_params.get('sort')
-        all_fields = {'id', 'name', 'status', 'average_grade', 'lectures_count', 'tasks_count'}
+        all_fields = {'id', 'name', 'status', 'average_grade', 'lectures_count', 'tasks_count', 'solved_percentage'}
         allowed_sort_fields = set(requested) & all_fields if requested else all_fields
         order_by = None
 
@@ -221,7 +235,7 @@ class StudentSummaryView(GenericAPIView):
         cols_keys = requested if requested is not None else list(serializer.child.fields.keys())
         cols = []
         for f in cols_keys:
-            col_meta = infer_col_meta_from_model(Course, f)
+            col_meta = infer_col_meta(f, serializer=serializer)
             col_meta['sortable'] = (f in allowed_sort_fields)
             cols.append(col_meta)
 
